@@ -11,8 +11,24 @@ class ProcFS < Roda
         ps "ax"
       end
 
-      r.is /(\d+)/ do |pid|
-        ps(pid).first
+      r.on /(\d+)/ do |pid|
+        @process = ps(pid).first
+
+        r.is do
+          @process
+        end
+
+        r.is "cmdline" do
+          @process[:command]
+        end
+
+        r.is "cwd" do
+          pwdx @process[:pid]
+        end
+
+        r.is "environ" do
+          environ @process[:pid]
+        end
       end
 
       r.is /(\w+)/ do |name|
@@ -31,6 +47,22 @@ end
 
 def pgrep(name)
   ps("ax").find_all { |p| p[:command] =~ /#{name}/i }
+end
+
+def pwdx(pid)
+  open("|lsof -p #{pid.to_i} | grep cwd") do |output|
+    output.gets.split(/\s+/).last rescue ""
+  end
+end
+
+def environ(pid)
+  open("|ps -p #{pid.to_i} -wwwE") do |ps|
+    ps.gets
+    ps.gets
+      .scan(/(\w+)=(\S*)/)
+      .map { |m| [m[0], m[1]] }
+      .to_h
+  end
 end
 
 def parse_ps(output)
